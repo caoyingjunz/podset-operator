@@ -1,0 +1,8 @@
+domain: github.com
+layout: go.kubebuilder.io/v3
+projectName: podset-operator
+repo: github.com/caoyingjunz/podset-operator
+version: 3-alpha
+plugins:
+  manifests.sdk.operatorframework.io/v2: {}
+  scorecard.sdk.operatorframework.io/v2: {}
