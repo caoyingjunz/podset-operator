@@ -1,0 +1,20 @@
+# permissions for end users to view podsets.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: podset-viewer-role
+rules:
+- apiGroups:
+  - cache.github.com
+  resources:
+  - podsets
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - cache.github.com
+  resources:
+  - podsets/status
+  verbs:
+  - get
