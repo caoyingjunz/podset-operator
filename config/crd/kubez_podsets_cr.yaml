@@ -1,0 +1,6 @@
+apiVersion: cache.github.com/v1alpha1
+kind: PodSet
+metadata:
+  name: podset-test
+  spec:
+    replicas: 3
