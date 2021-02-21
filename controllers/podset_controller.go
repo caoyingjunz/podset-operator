@@ -18,11 +18,16 @@ package controllers
 
 import (
 	"context"
+	"reflect"
 
 	"github.com/go-logr/logr"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	cachev1alpha1 "github.com/caoyingjunz/podset-operator/api/v1alpha1"
 )
@@ -40,7 +45,7 @@ type PodSetReconciler struct {
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
+// TODO(caoyingjun): Modify the Reconcile function to compare the state specified by
 // the PodSet object against the actual cluster state, and then
 // perform operations to make the cluster state reflect the state specified by
 // the user.
@@ -48,10 +53,65 @@ type PodSetReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.7.0/pkg/reconcile
 func (r *PodSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = r.Log.WithValues("podset", req.NamespacedName)
+	Logger := r.Log.WithValues("podSet", req.NamespacedName)
+	Logger.Info("Reconciling podSet")
 
-	// your logic here
+	// Try to fetch the PodSet
+	podSet := &cachev1alpha1.PodSet{}
+	err := r.Get(context.TODO(), req.NamespacedName, podSet)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// Req object not found, could have been deleted after reconcile request.
+			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
+			// Return and don't requeue
+			return ctrl.Result{}, nil
+		}
+		Logger.Error(err, "failed to get pod from podSet")
+		return ctrl.Result{}, err
+	}
 
+	// List all pods owned by this PodSet
+	lbs := labels.Set{
+		"app":     podSet.Name,
+		"version": "v0.1",
+	}
+
+	existingPods := &corev1.PodList{}
+	err = r.List(context.TODO(), existingPods, &client.ListOptions{
+		Namespace:     req.Namespace,
+		LabelSelector: labels.SelectorFromSet(lbs),
+	})
+	if err != nil {
+		Logger.Error(err, "failed to list existing pods in the podSet")
+		return ctrl.Result{}, err
+	}
+
+	existingPodNames := make([]string, 0)
+	for _, pod := range existingPods.Items {
+		if pod.GetObjectMeta().GetDeletionTimestamp() != nil {
+			continue
+		}
+		if pod.Status.Phase == corev1.PodPending || pod.Status.Phase == corev1.PodRunning {
+			existingPodNames = append(existingPodNames, pod.GetObjectMeta().GetName())
+		}
+	}
+	Logger.Info("Checking podSet", "expected replicas", podSet.Spec.Replicas, "Pod.Names", existingPodNames)
+
+	status := cachev1alpha1.PodSetStatus{
+		Replicas: int32(len(existingPodNames)),
+		PodNames: existingPodNames,
+	}
+
+	if !reflect.DeepEqual(podSet.Status, status) {
+		podSet.Status = status
+		err := r.Status().Update(context.TODO(), podSet)
+		if err != nil {
+			Logger.Error(err, "failed to update the podSet")
+			return reconcile.Result{}, err
+		}
+	}
+
+	// TODO
 	return ctrl.Result{}, nil
 }
 
