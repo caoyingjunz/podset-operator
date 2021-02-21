@@ -20,6 +20,7 @@ import (
 	"context"
 
 	"github.com/go-logr/logr"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -48,9 +49,17 @@ type PodSetReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.7.0/pkg/reconcile
 func (r *PodSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = r.Log.WithValues("podset", req.NamespacedName)
+	Logger := r.Log.WithValues("Podset", req.NamespacedName)
+	Logger.Info("Reconciling PodSet")
 
-	// your logic here
+	podSet := &cachev1alpha1.PodSet{}
+	err := r.Get(context.TODO(), req.NamespacedName, podSet)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{}, err
+	}
 
 	return ctrl.Result{}, nil
 }
