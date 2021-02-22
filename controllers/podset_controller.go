@@ -20,6 +20,7 @@ import (
 	"context"
 	"reflect"
 
+	cachev1alpha1 "github.com/caoyingjunz/podset-operator/api/v1alpha1"
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -30,8 +31,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
-	cachev1alpha1 "github.com/caoyingjunz/podset-operator/api/v1alpha1"
 )
 
 // PodSetReconciler reconciles a PodSet object
@@ -63,25 +62,26 @@ func (r *PodSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	err := r.Get(context.TODO(), req.NamespacedName, podSet)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			// Req object not found, could have been deleted after reconcile request.
-			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
+			// Req object not found, Created objects are automatically garbage collected.
+			// For additional cleanup logic use finalizers.
 			// Return and don't requeue
 			return ctrl.Result{}, nil
 		}
 		Logger.Error(err, "failed to get pod from podSet")
+		// Error reading the object - requeue the request.
 		return ctrl.Result{}, err
 	}
 
-	// List all pods owned by this PodSet
-	lbs := labels.Set{
-		"app":     podSet.Name,
-		"version": "v0.1",
+	// Set the pods owned by PodSet
+	lSet := labels.Set{
+		"app":      podSet.Name,
+		"operator": "podset",
 	}
 
 	existingPods := &corev1.PodList{}
 	err = r.List(context.TODO(), existingPods, &client.ListOptions{
 		Namespace:     req.Namespace,
-		LabelSelector: labels.SelectorFromSet(lbs),
+		LabelSelector: labels.SelectorFromSet(lSet),
 	})
 	if err != nil {
 		Logger.Error(err, "failed to list existing pods in the podSet")
@@ -118,7 +118,7 @@ func (r *PodSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		// create a new pod. Just one at a time (this reconciler will be called again afterwards)
 		Logger.Info("Adding a pod in the podset", "expected replicas", podSet.Spec.Replicas, "Pod.Names", existingPodNames)
 
-		pod := newPod(podSet)
+		pod := createPodFromSet(podSet)
 		if err := controllerutil.SetControllerReference(podSet, pod, r.Scheme); err != nil {
 			Logger.Error(err, "unable to set owner reference on new pod")
 			return reconcile.Result{}, err
@@ -146,11 +146,11 @@ func (r *PodSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	return ctrl.Result{Requeue: true}, nil
 }
 
-// newPod returns a test-powerfu pod with the same name/namespace as the cr
-func newPod(cr *cachev1alpha1.PodSet) *corev1.Pod {
+// createPodFromSet returns a test-powerfu pod with the same name/namespace as the set
+func createPodFromSet(cr *cachev1alpha1.PodSet) *corev1.Pod {
 	labels := map[string]string{
-		"app":     cr.Name,
-		"version": "v0.1",
+		"app":      cr.Name,
+		"operator": "podset",
 	}
 	return &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
