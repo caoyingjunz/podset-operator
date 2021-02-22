@@ -11,11 +11,14 @@ spec:
       name: Current
       type: string
   group: cache.github.com
+  version: v1alpha1
   names:
     kind: PodSet
     listKind: PodSetList
     plural: podsets
     singular: podset
+    shortNames:
+      - ps
   scope: Namespaced
   subresources:
     status: {}
@@ -59,7 +62,6 @@ spec:
             - replicas
           type: object
       type: object
-  version: v1alpha1
   versions:
     - name: v1alpha1
       served: true
