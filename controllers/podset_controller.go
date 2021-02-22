@@ -55,7 +55,6 @@ type PodSetReconciler struct {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.7.0/pkg/reconcile
 func (r *PodSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	Logger := r.Log.WithValues("podSet", req.NamespacedName)
-	Logger.Info("Reconciling podSet")
 
 	// Try to fetch the PodSet
 	podSet := &cachev1alpha1.PodSet{}
