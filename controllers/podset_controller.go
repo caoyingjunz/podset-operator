@@ -135,7 +135,15 @@ func (r *PodSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		// Delete a pod. Just one at a time (this reconciler will be called again afterwards)
 		Logger.Info("Deleting a pod in the podset", "expected replicas", podSet.Spec.Replicas, "Pod.Names", existingPodNames)
 		// TODO(caoyingjun): 后续优化，删除的应该是最后创建的 pod
-		pod := existingPods.Items[0]
+		var d int = 0
+		for i := 0; i < len(existingPodNames); i++ {
+			t1 := existingPods.Items[d].Status.StartTime
+			t2 := existingPods.Items[i].Status.StartTime
+			if err == nil && t1.Before(t2) {
+				t1,d = t2,i
+			}
+		}
+		pod := existingPods.Items[d]
 		err = r.Delete(context.TODO(), &pod)
 		if err != nil {
 			Logger.Error(err, "failed to delete a pod")
