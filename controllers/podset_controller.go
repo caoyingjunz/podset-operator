@@ -22,12 +22,12 @@ import (
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
@@ -47,21 +47,33 @@ type PodSetReconciler struct {
 //+kubebuilder:rbac:groups=pixiu.pixiu.io,resources=podsets/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=pixiu.pixiu.io,resources=podsets/finalizers,verbs=update
 
+// Implement reconcile.Reconciler so the controller can reconcile objects
+var _ reconcile.Reconciler = &PodSetReconciler{}
+
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the PodSet object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.11.2/pkg/reconcile
 func (r *PodSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = log.FromContext(ctx)
+	log := r.Log.WithValues("request", req)
+	log.V(1).Info("reconciling pod set operator")
 
-	fmt.Println(req.Namespace, req.Name)
+	create := false
+	name := req.NamespacedName.Name
+	podSet := &pixiuv1alpha1.PodSet{}
+	if err := r.Get(ctx, req.NamespacedName, podSet); err != nil {
+		if apierrors.IsNotFound(err) {
+			create = true
+			podSet.SetName(name)
+		} else {
+			log.Error(err, "error requesting pod set operator")
+			return reconcile.Result{Requeue: true}, nil
+		}
+	}
 
-	// TODO(user): your logic here
+	if create {
+		fmt.Println("create", req.Namespace, req.Name)
+	} else {
+		fmt.Println("update", req.Namespace, req.Name)
+	}
 
 	return ctrl.Result{}, nil
 }
@@ -106,5 +118,6 @@ func (r *PodSetReconciler) mapToPods(obj client.Object) (requests []reconcile.Re
 			break
 		}
 	}
+
 	return
 }
