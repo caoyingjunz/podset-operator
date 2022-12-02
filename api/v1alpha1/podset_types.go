@@ -1,5 +1,5 @@
 /*
-Copyright 2021.
+Copyright 2022.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -28,20 +28,18 @@ type PodSetSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	Replicas int32 `json:"replicas"`
+	// Foo is an example field of PodSet. Edit podset_types.go to remove/update
+	Foo string `json:"foo,omitempty"`
 }
 
 // PodSetStatus defines the observed state of PodSet
 type PodSetStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-
-	Replicas int32    `json:"replicas"`
-	PodNames []string `json:"podNames"`
 }
 
-// +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
+//+kubebuilder:object:root=true
+//+kubebuilder:subresource:status
 
 // PodSet is the Schema for the podsets API
 type PodSet struct {
@@ -52,7 +50,7 @@ type PodSet struct {
 	Status PodSetStatus `json:"status,omitempty"`
 }
 
-// +kubebuilder:object:root=true
+//+kubebuilder:object:root=true
 
 // PodSetList contains a list of PodSet
 type PodSetList struct {

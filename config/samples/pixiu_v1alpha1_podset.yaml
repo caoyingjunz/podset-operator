@@ -1,0 +1,6 @@
+apiVersion: pixiu.pixiu.io/v1alpha1
+kind: PodSet
+metadata:
+  name: podset-sample
+spec:
+  # TODO(user): Add fields here
