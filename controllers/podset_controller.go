@@ -18,19 +18,29 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 
+	"github.com/go-logr/logr"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	pixiuv1alpha1 "github.com/caoyingjunz/podset-operator/api/v1alpha1"
+	pixiutypes "github.com/caoyingjunz/podset-operator/pkg/types"
+	"github.com/caoyingjunz/podset-operator/pkg/util"
 )
 
 // PodSetReconciler reconciles a PodSet object
 type PodSetReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+	Log    logr.Logger
 }
 
 //+kubebuilder:rbac:groups=pixiu.pixiu.io,resources=podsets,verbs=get;list;watch;create;update;patch;delete
@@ -49,6 +59,8 @@ type PodSetReconciler struct {
 func (r *PodSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	_ = log.FromContext(ctx)
 
+	fmt.Println(req.Namespace, req.Name)
+
 	// TODO(user): your logic here
 
 	return ctrl.Result{}, nil
@@ -56,7 +68,43 @@ func (r *PodSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *PodSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	enqueuePod := handler.EnqueueRequestsFromMapFunc(r.mapToPods)
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&pixiuv1alpha1.PodSet{}).
+		Watches(&source.Kind{Type: &corev1.Pod{}}, enqueuePod).
 		Complete(r)
+}
+
+func (r *PodSetReconciler) mapToPods(obj client.Object) (requests []reconcile.Request) {
+	if obj == nil {
+		return
+	}
+	if !util.IsOwnedByKind(obj, pixiutypes.PodSetKind) {
+		return
+	}
+
+	var (
+		err     error
+		ctx     = context.TODO()
+		podSets = &pixiuv1alpha1.PodSetList{}
+	)
+	// TODO: 追加 label 和 ns 过滤
+	if err = r.List(ctx, podSets); err != nil {
+		r.Log.Error(err, "failed to list podSet")
+		return
+	}
+
+	oref := util.GetOwnerByKind(obj, pixiutypes.PodSetKind)
+	for _, podSet := range podSets.Items {
+		if oref.UID == podSet.UID {
+			requests = append(requests, reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Namespace: podSet.Namespace, Name: podSet.Name,
+				},
+			})
+			break
+		}
+	}
+	return
 }
