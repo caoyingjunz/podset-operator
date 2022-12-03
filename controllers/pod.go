@@ -1,5 +1,5 @@
 /*
-Copyright 2022.
+Copyright 2021 The Pixiu Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
@@ -68,4 +69,20 @@ func (r *PodSetReconciler) resolveControllerRef(namespace string, controllerRef 
 	}
 
 	return podSet
+}
+func IsPodActive(p *v1.Pod) bool {
+	return v1.PodSucceeded != p.Status.Phase &&
+		v1.PodFailed != p.Status.Phase &&
+		p.DeletionTimestamp == nil
+}
+
+// FilterActivePods returns pods that have not terminated.
+func FilterActivePods(pods []v1.Pod) []*v1.Pod {
+	var result []*v1.Pod
+	for _, p := range pods {
+		if IsPodActive(&p) {
+			result = append(result, &p)
+		}
+	}
+	return result
 }

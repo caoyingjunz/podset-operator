@@ -1,5 +1,5 @@
 /*
-Copyright 2022.
+Copyright 2021 The Pixiu Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -67,18 +67,21 @@ func (r *PodSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		}
 	}
 
-	labelSelector, err := r.parsePodSelector(podSet)
-	if err != nil {
-		return reconcile.Result{Requeue: true}, nil
-	}
-	pods := &corev1.PodList{}
-	if err = r.List(ctx, pods, &client.ListOptions{Namespace: req.Namespace, LabelSelector: labelSelector}); err != nil {
+	//labelSelector, err := r.parsePodSelector(podSet)
+	//if err != nil {
+	//	return reconcile.Result{Requeue: true}, nil
+	//}
+	allPods := &corev1.PodList{}
+	// list all pods to include the pods that don't match the rs`s selector anymore but has the stale controller ref.
+	if err := r.List(ctx, allPods, &client.ListOptions{Namespace: req.Namespace}); err != nil {
 		log.Error(err, "error list pods")
 		return reconcile.Result{Requeue: true}, nil
 	}
+	// Ignore inactive pods.
+	filteredPods := FilterActivePods(allPods.Items)
 
 	// TODO
-	fmt.Println("pods", pods.Items)
+	fmt.Println("pods", filteredPods)
 	return ctrl.Result{}, nil
 }
 
