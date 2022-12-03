@@ -23,25 +23,23 @@ import (
 
 // PodSetSpec defines the desired state of PodSet
 type PodSetSpec struct {
-	Replicas *int32                `json:"replicas,omitempty" protobuf:"varint,1,opt,name=replicas"`
+	// Replicas is the number of desired pods.
+	Replicas *int32 `json:"replicas,omitempty" protobuf:"varint,1,opt,name=replicas"`
+
+	// Selector is a label query over pods that should match the pods count.
 	Selector *metav1.LabelSelector `json:"selector" protobuf:"bytes,2,opt,name=selector"`
 
 	// Template describes the pods that will be created.
 	Template v1.PodTemplateSpec `json:"template" protobuf:"bytes,3,opt,name=template"`
 
-	// The number of old ReplicaSets to retain to allow rollback.
-	// This is a pointer to distinguish between explicit zero and not specified.
-	// Defaults to 10.
-	// +optional
-	RevisionHistoryLimit *int32 `json:"revisionHistoryLimit,omitempty" protobuf:"varint,6,opt,name=revisionHistoryLimit"`
-
-	// Indicates that the deployment is paused.
+	// Indicates that the PodSet is paused.
 	// +optional
 	Paused bool `json:"paused,omitempty" protobuf:"varint,7,opt,name=paused"`
 }
 
 // PodSetStatus defines the observed state of PodSet
 type PodSetStatus struct {
+	// ObservedGeneration reflects the generation of the most recently observed PodSet.
 	ObservedGeneration int64 `json:"observedGeneration,omitempty" protobuf:"varint,1,opt,name=observedGeneration"`
 
 	// Total number of non-terminated pods targeted by this deployment (their labels match the selector).
@@ -70,12 +68,6 @@ type PodSetStatus struct {
 	// +patchMergeKey=type
 	// +patchStrategy=merge
 	Conditions []PodSetCondition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,6,rep,name=conditions"`
-
-	// Count of hash collisions for the Deployment. The Deployment controller uses this
-	// field as a collision avoidance mechanism when it needs to create the name for the
-	// newest ReplicaSet.
-	// +optional
-	CollisionCount *int32 `json:"collisionCount,omitempty" protobuf:"varint,8,opt,name=collisionCount"`
 }
 
 // PodSetCondition describes the state of a podset at a certain point.
