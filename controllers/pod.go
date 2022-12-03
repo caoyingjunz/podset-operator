@@ -70,6 +70,7 @@ func (r *PodSetReconciler) resolveControllerRef(namespace string, controllerRef 
 
 	return podSet
 }
+
 func IsPodActive(p *v1.Pod) bool {
 	return v1.PodSucceeded != p.Status.Phase &&
 		v1.PodFailed != p.Status.Phase &&
