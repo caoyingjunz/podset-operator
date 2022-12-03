@@ -39,8 +39,8 @@ jobs:
       with:
         go-version: ${{ env.GO_VERSION }}
 
-    - name: Build the gopixiu binariy
+    - name: Build the podset controller binariy
       run: go build -v ./...
 
-    - name: Run gopixiu unit test
-      run: go test -v ./...
+#    - name: Run gopixiu unit test
+#      run: go test -v ./...
