@@ -2,5 +2,26 @@ apiVersion: pixiu.pixiu.io/v1alpha1
 kind: PodSet
 metadata:
   name: podset-sample
+  namespace: default
 spec:
-  # TODO(user): Add fields here
+  replicas: 1
+  selector:
+    matchLabels:
+      app: podset-sample
+  template:
+    metadata:
+      labels:
+        app: podset-sample
+    spec:
+      containers:
+      - image: nginx
+        imagePullPolicy: IfNotPresent
+        name: console
+        ports:
+        - containerPort: 80
+          protocol: TCP
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30

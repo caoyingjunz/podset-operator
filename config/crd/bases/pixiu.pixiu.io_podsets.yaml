@@ -19,7 +19,13 @@ spec:
   versions:
   - additionalPrinterColumns:
     - jsonPath: .spec.replicas
-      name: Replicas
+      name: READY
+      type: integer
+    - jsonPath: .spec.replicas
+      name: UP-TO-DATE
+      type: integer
+    - jsonPath: .spec.replicas
+      name: AVAILABLE
       type: integer
     - jsonPath: .metadata.creationTimestamp
       name: Age
