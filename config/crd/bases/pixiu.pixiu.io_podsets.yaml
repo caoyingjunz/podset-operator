@@ -13,9 +13,18 @@ spec:
     listKind: PodSetList
     plural: podsets
     singular: podset
+    shortNames:
+    - ps
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .spec.replicas
+      name: Replicas
+      type: integer
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: PodSet is the Schema for the podsets API
