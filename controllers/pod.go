@@ -47,8 +47,7 @@ func (r *PodSetReconciler) mapToPods(obj client.Object) (requests []reconcile.Re
 		ctx     = context.TODO()
 		podSets = &pixiuv1alpha1.PodSetList{}
 	)
-	// TODO: 追加 label 和 ns 过滤
-	if err = r.List(ctx, podSets); err != nil {
+	if err = r.List(ctx, podSets, &client.ListOptions{Namespace: obj.GetNamespace()}); err != nil {
 		r.Log.Error(err, "failed to list podSet")
 		return
 	}
