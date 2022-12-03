@@ -8,4 +8,4 @@ webhook:
   port: 9443
 leaderElection:
   leaderElect: true
-  resourceName: 98aadc68.github.com
+  resourceName: 98aadc68.pixiu.io

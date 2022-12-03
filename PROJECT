@@ -1,13 +1,19 @@
-domain: github.com
-layout: go.kubebuilder.io/v3
-projectName: podset-operator
-repo: github.com/caoyingjunz/podset-operator
-resources:
-- crdVersion: v1
-  group: cache
-  kind: PodSet
-  version: v1alpha1
-version: 3-alpha
+domain: pixiu.io
+layout:
+- go.kubebuilder.io/v3
 plugins:
   manifests.sdk.operatorframework.io/v2: {}
   scorecard.sdk.operatorframework.io/v2: {}
+projectName: podset-operator
+repo: github.com/caoyingjunz/podset-operator
+resources:
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: pixiu.io
+  group: pixiu
+  kind: PodSet
+  path: github.com/caoyingjunz/podset-operator/api/v1alpha1
+  version: v1alpha1
+version: "3"
