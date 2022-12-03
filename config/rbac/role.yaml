@@ -1,0 +1,33 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: manager-role
+rules:
+- apiGroups:
+  - pixiu.pixiu.io
+  resources:
+  - podsets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - pixiu.pixiu.io
+  resources:
+  - podsets/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - pixiu.pixiu.io
+  resources:
+  - podsets/status
+  verbs:
+  - get
+  - patch
+  - update
