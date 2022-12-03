@@ -72,14 +72,13 @@ func (r *PodSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return reconcile.Result{Requeue: true}, nil
 	}
 	pods := &corev1.PodList{}
-	if err := r.List(ctx, pods, &client.ListOptions{Namespace: req.Namespace, LabelSelector: labelSelector}); err != nil {
+	if err = r.List(ctx, pods, &client.ListOptions{Namespace: req.Namespace, LabelSelector: labelSelector}); err != nil {
 		log.Error(err, "error list pods")
 		return reconcile.Result{Requeue: true}, nil
 	}
 
 	// TODO
 	fmt.Println("pods", pods.Items)
-
 	return ctrl.Result{}, nil
 }
 

@@ -27,42 +27,45 @@ import (
 
 	pixiuv1alpha1 "github.com/caoyingjunz/podset-operator/api/v1alpha1"
 	pixiutypes "github.com/caoyingjunz/podset-operator/pkg/types"
-	"github.com/caoyingjunz/podset-operator/pkg/util"
 )
-
-func (r *PodSetReconciler) parsePodSelector(ps *pixiuv1alpha1.PodSet) (labels.Selector, error) {
-	return metav1.LabelSelectorAsSelector(ps.Spec.Selector)
-}
 
 func (r *PodSetReconciler) mapToPods(obj client.Object) (requests []reconcile.Request) {
 	if obj == nil {
 		return
 	}
-	if !util.IsOwnedByKind(obj, pixiutypes.PodSetKind) {
-		return
-	}
 
-	var (
-		err     error
-		ctx     = context.TODO()
-		podSets = &pixiuv1alpha1.PodSetList{}
-	)
-	if err = r.List(ctx, podSets, &client.ListOptions{Namespace: obj.GetNamespace()}); err != nil {
-		r.Log.Error(err, "failed to list podSet")
-		return
-	}
-
-	oref := util.GetOwnerByKind(obj, pixiutypes.PodSetKind)
-	for _, podSet := range podSets.Items {
-		if oref.UID == podSet.UID {
-			requests = append(requests, reconcile.Request{
-				NamespacedName: types.NamespacedName{
-					Namespace: podSet.Namespace, Name: podSet.Name,
-				},
-			})
-			break
+	// If it has a ControllerRef, that's all that matters.
+	if controllerRef := metav1.GetControllerOf(obj); controllerRef != nil {
+		podSet := r.resolveControllerRef(obj.GetNamespace(), controllerRef)
+		if podSet == nil {
+			return
 		}
+		requests = append(requests, reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Namespace: podSet.Namespace, Name: podSet.Name,
+			},
+		})
 	}
 
 	return
+}
+
+func (r *PodSetReconciler) parsePodSelector(ps *pixiuv1alpha1.PodSet) (labels.Selector, error) {
+	return metav1.LabelSelectorAsSelector(ps.Spec.Selector)
+}
+
+func (r *PodSetReconciler) resolveControllerRef(namespace string, controllerRef *metav1.OwnerReference) *pixiuv1alpha1.PodSet {
+	if controllerRef.Kind != pixiutypes.PodSetKind {
+		return nil
+	}
+
+	podSet := &pixiuv1alpha1.PodSet{}
+	if err := r.Get(context.TODO(), types.NamespacedName{Namespace: namespace, Name: controllerRef.Name}, podSet); err != nil {
+		return nil
+	}
+	if podSet.UID != controllerRef.UID {
+		return nil
+	}
+
+	return podSet
 }
