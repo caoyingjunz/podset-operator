@@ -19,11 +19,16 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
+	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -31,6 +36,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	pixiuv1alpha1 "github.com/caoyingjunz/podset-operator/api/v1alpha1"
+	"github.com/caoyingjunz/podset-operator/pkg/types"
 )
 
 // PodSetReconciler reconciles a PodSet object
@@ -38,6 +44,8 @@ type PodSetReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 	Log    logr.Logger
+
+	Recorder record.EventRecorder // TODO
 }
 
 //+kubebuilder:rbac:groups=pixiu.pixiu.io,resources=podsets,verbs=get;list;watch;create;update;patch;delete
@@ -67,22 +75,104 @@ func (r *PodSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		}
 	}
 
-	//labelSelector, err := r.parsePodSelector(podSet)
-	//if err != nil {
-	//	return reconcile.Result{Requeue: true}, nil
-	//}
+	labelSelector, err := r.parsePodSelector(podSet)
+	if err != nil {
+		return reconcile.Result{Requeue: true}, nil
+	}
 	allPods := &corev1.PodList{}
 	// list all pods to include the pods that don't match the rs`s selector anymore but has the stale controller ref.
-	if err := r.List(ctx, allPods, &client.ListOptions{Namespace: req.Namespace}); err != nil {
+	if err = r.List(ctx, allPods, &client.ListOptions{Namespace: req.Namespace, LabelSelector: labelSelector}); err != nil {
 		log.Error(err, "error list pods")
 		return reconcile.Result{Requeue: true}, nil
 	}
 	// Ignore inactive pods.
 	filteredPods := FilterActivePods(allPods.Items)
 
-	// TODO
-	fmt.Println("pods", filteredPods)
+	var replicasErr error
+	if podSet.DeletionTimestamp == nil {
+		replicasErr = r.manageReplicas(ctx, filteredPods, podSet)
+	}
+
+	podSet = podSet.DeepCopy()
+	newStatus := r.calculateStatus(podSet, filteredPods, replicasErr)
+
+	fmt.Println("pods", newStatus)
 	return ctrl.Result{}, nil
+}
+
+func (r *PodSetReconciler) manageReplicas(ctx context.Context, filteredPods []*corev1.Pod, podSet *pixiuv1alpha1.PodSet) error {
+	diff := len(filteredPods) - int(*podSet.Spec.Replicas)
+	if diff < 0 {
+		// 实际的pod少于期望，新增 pod
+		diff *= -1
+		if diff > types.BurstReplicas {
+			diff = types.BurstReplicas
+		}
+		r.Log.Info("Too few replicas", "podSet", klog.KObj(podSet), "need", *(podSet.Spec.Replicas), "creating", diff)
+		_, err := r.createPodsInBatch(diff, 1, func() error {
+			if err := r.createPod(ctx, podSet.Namespace, &podSet.Spec.Template, podSet, metav1.NewControllerRef(podSet, pixiuv1alpha1.GroupVersionKind)); err != nil {
+				fmt.Println("error", err)
+				return err
+			}
+			return nil
+		})
+
+		return err
+
+	} else if diff > 0 {
+		// 实际存在的pod大于期望值，删除多余的 pod
+		fmt.Println("删除pod", diff)
+	}
+
+	return nil
+}
+
+func (r *PodSetReconciler) createPod(ctx context.Context, namespace string, template *corev1.PodTemplateSpec, object runtime.Object, controllerRef *metav1.OwnerReference) error {
+	if err := validateControllerRef(controllerRef); err != nil {
+		return err
+	}
+	pod, err := GetPodFromTemplate(template, object, controllerRef)
+	if err != nil {
+		return err
+	}
+
+	if len(labels.Set(pod.Labels)) == 0 {
+		// return fmt.Errorf("failed to create pod, no labels")
+		// TODO: CRD 在存储 spec.template 为空
+		ps := object.(*pixiuv1alpha1.PodSet)
+		pod.Labels = ps.Spec.Selector.MatchLabels
+	}
+
+	pod.SetNamespace(namespace)
+	if err = r.Create(ctx, pod); err != nil {
+		if apierrors.HasStatusCause(err, corev1.NamespaceTerminatingCause) {
+			// TODO: 打印个事件
+		}
+		return err
+	}
+
+	return nil
+}
+
+func (r *PodSetReconciler) createPodsInBatch(count int, initialBatchSize int, fn func() error) (int, error) {
+	errCh := make(chan error, count)
+	var wg sync.WaitGroup
+	wg.Add(count)
+	for i := 0; i < count; i++ {
+		go func() {
+			defer wg.Done()
+			if err := fn(); err != nil {
+				errCh <- err
+			}
+		}()
+	}
+	wg.Wait()
+
+	return 0, nil
+}
+
+func (r *PodSetReconciler) calculateStatus(podSet *pixiuv1alpha1.PodSet, filteredPods []*corev1.Pod, replicasErr error) pixiuv1alpha1.PodSetStatus {
+	return pixiuv1alpha1.PodSetStatus{}
 }
 
 // SetupWithManager sets up the controller with the Manager.

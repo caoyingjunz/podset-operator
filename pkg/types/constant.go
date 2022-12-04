@@ -18,4 +18,6 @@ package types
 
 const (
 	PodSetKind = "PodSet"
+
+	BurstReplicas = 500
 )
