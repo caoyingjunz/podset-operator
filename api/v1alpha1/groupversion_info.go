@@ -22,6 +22,8 @@ package v1alpha1
 import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/scheme"
+
+	"github.com/caoyingjunz/podset-operator/pkg/types"
 )
 
 var (
@@ -33,4 +35,12 @@ var (
 
 	// AddToScheme adds the types in this group-version to the given scheme.
 	AddToScheme = SchemeBuilder.AddToScheme
+)
+
+var (
+	GroupVersionKind = schema.GroupVersionKind{
+		Group:   GroupVersion.Group,
+		Version: GroupVersion.Version,
+		Kind:    types.PodSetKind,
+	}
 )
