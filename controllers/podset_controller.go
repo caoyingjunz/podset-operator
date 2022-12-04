@@ -135,8 +135,12 @@ func (r *PodSetReconciler) createPod(ctx context.Context, namespace string, temp
 	if err != nil {
 		return err
 	}
+
 	if len(labels.Set(pod.Labels)) == 0 {
-		return fmt.Errorf("failed to create pod, no labels")
+		// return fmt.Errorf("failed to create pod, no labels")
+		// TODO: CRD 在存储 spec.template 为空
+		ps := object.(*pixiuv1alpha1.PodSet)
+		pod.Labels = ps.Spec.Selector.MatchLabels
 	}
 
 	pod.SetNamespace(namespace)
