@@ -96,7 +96,11 @@ func (r *PodSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	podSet = podSet.DeepCopy()
 	newStatus := r.calculateStatus(podSet, filteredPods, replicasErr)
 
-	fmt.Println("pods", newStatus)
+	_, err = r.updatePodSetStatus(podSet, newStatus)
+	if err != nil {
+		return reconcile.Result{Requeue: true}, nil
+	}
+
 	return ctrl.Result{}, nil
 }
 
@@ -215,7 +219,22 @@ func (r *PodSetReconciler) createPodsInBatch(count int, initialBatchSize int, fn
 func (r *PodSetReconciler) calculateStatus(podSet *pixiuv1alpha1.PodSet, filteredPods []*corev1.Pod, replicasErr error) pixiuv1alpha1.PodSetStatus {
 	newStatus := podSet.Status
 
-	return pixiuv1alpha1.PodSetStatus{}
+	readyReplicasCount := 0
+	availableReplicasCount := 0
+	// TODO: 设置 condition
+	for _, pod := range filteredPods {
+		if IsPodReady(pod) {
+			readyReplicasCount++
+			if IsPodAvailable(pod, 0, metav1.Now()) {
+				availableReplicasCount++
+			}
+		}
+	}
+
+	newStatus.Replicas = int32(len(filteredPods))
+	newStatus.ReadyReplicas = int32(readyReplicasCount)
+	newStatus.AvailableReplicas = int32(availableReplicasCount)
+	return newStatus
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -226,6 +245,11 @@ func (r *PodSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&pixiuv1alpha1.PodSet{}).
 		Watches(&source.Kind{Type: &corev1.Pod{}}, enqueuePod).
 		Complete(r)
+}
+
+func (r *PodSetReconciler) updatePodSetStatus(podSet *pixiuv1alpha1.PodSet, newStatus pixiuv1alpha1.PodSetStatus) (*pixiuv1alpha1.PodSet, error) {
+
+	return nil, nil
 }
 
 func getPodsToDelete(filteredPods []*corev1.Pod, diff int) []*corev1.Pod {
