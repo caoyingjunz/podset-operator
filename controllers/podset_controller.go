@@ -103,7 +103,6 @@ func (r *PodSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 func (r *PodSetReconciler) manageReplicas(ctx context.Context, filteredPods []*corev1.Pod, podSet *pixiuv1alpha1.PodSet) error {
 	diff := len(filteredPods) - int(*podSet.Spec.Replicas)
 	if diff < 0 {
-		// 实际的pod少于期望，新增 pod
 		diff *= -1
 		if diff > types.BurstReplicas {
 			diff = types.BurstReplicas
@@ -120,8 +119,34 @@ func (r *PodSetReconciler) manageReplicas(ctx context.Context, filteredPods []*c
 		return err
 
 	} else if diff > 0 {
-		// 实际存在的pod大于期望值，删除多余的 pod
-		fmt.Println("删除pod", diff)
+		if diff > types.BurstReplicas {
+			diff = types.BurstReplicas
+		}
+		r.Log.Info("Too many replicas", "podSet", klog.KObj(podSet), "need", *(podSet.Spec.Replicas), "deleting", diff)
+		podToDelete := getPodsToDelete(filteredPods, diff)
+
+		errCh := make(chan error, diff)
+		var wg sync.WaitGroup
+		wg.Add(diff)
+		for _, pod := range podToDelete {
+			go func(targetPod *corev1.Pod) {
+				defer wg.Done()
+				if err := r.deletePod(ctx, targetPod.Namespace, targetPod.Name); err != nil {
+					if !apierrors.IsNotFound(err) {
+						errCh <- err
+					}
+				}
+			}(pod)
+		}
+		wg.Wait()
+
+		select {
+		case err := <-errCh:
+			if err != nil {
+				return err
+			}
+		default:
+		}
 	}
 
 	return nil
@@ -149,6 +174,22 @@ func (r *PodSetReconciler) createPod(ctx context.Context, namespace string, temp
 			// TODO: 打印个事件
 		}
 		return err
+	}
+
+	return nil
+}
+
+func (r *PodSetReconciler) deletePod(ctx context.Context, namespace string, name string) error {
+	pod := &corev1.Pod{}
+	pod.SetNamespace(namespace)
+	pod.SetName(name)
+	if err := r.Delete(ctx, pod); err != nil {
+		if apierrors.IsNotFound(err) {
+			klog.V(4).Infof("pod %v/%v has already been deleted.", namespace, name)
+			return err
+		}
+
+		return fmt.Errorf("failed to delete pod: %v", err)
 	}
 
 	return nil
@@ -183,4 +224,8 @@ func (r *PodSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&pixiuv1alpha1.PodSet{}).
 		Watches(&source.Kind{Type: &corev1.Pod{}}, enqueuePod).
 		Complete(r)
+}
+
+func getPodsToDelete(filteredPods []*corev1.Pod, diff int) []*corev1.Pod {
+	return filteredPods[:diff]
 }
