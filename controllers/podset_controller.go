@@ -213,6 +213,8 @@ func (r *PodSetReconciler) createPodsInBatch(count int, initialBatchSize int, fn
 }
 
 func (r *PodSetReconciler) calculateStatus(podSet *pixiuv1alpha1.PodSet, filteredPods []*corev1.Pod, replicasErr error) pixiuv1alpha1.PodSetStatus {
+	newStatus := podSet.Status
+
 	return pixiuv1alpha1.PodSetStatus{}
 }
 
