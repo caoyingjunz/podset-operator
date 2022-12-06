@@ -18,13 +18,14 @@ package controllers
 
 import (
 	"fmt"
+	"time"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	apimachineryvalidation "k8s.io/apimachinery/pkg/api/validation"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
-	"time"
 )
 
 func GetPodFromTemplate(template *corev1.PodTemplateSpec, parentObject runtime.Object, controllerRef *metav1.OwnerReference) (*corev1.Pod, error) {
