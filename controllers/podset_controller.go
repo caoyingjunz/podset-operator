@@ -114,7 +114,6 @@ func (r *PodSetReconciler) manageReplicas(ctx context.Context, filteredPods []*c
 		r.Log.Info("Too few replicas", "podSet", klog.KObj(podSet), "need", *(podSet.Spec.Replicas), "creating", diff)
 		_, err := r.createPodsInBatch(diff, 1, func() error {
 			if err := r.createPod(ctx, podSet.Namespace, &podSet.Spec.Template, podSet, metav1.NewControllerRef(podSet, pixiuv1alpha1.GroupVersionKind)); err != nil {
-				fmt.Println("error", err)
 				return err
 			}
 			return nil
@@ -248,8 +247,22 @@ func (r *PodSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func (r *PodSetReconciler) updatePodSetStatus(podSet *pixiuv1alpha1.PodSet, newStatus pixiuv1alpha1.PodSetStatus) (*pixiuv1alpha1.PodSet, error) {
+	if podSet.Status.Replicas == newStatus.Replicas &&
+		podSet.Status.ReadyReplicas == newStatus.ReadyReplicas &&
+		podSet.Status.AvailableReplicas == newStatus.AvailableReplicas &&
+		// TODO: 判断条件
+		//reflect.DeepEqual(podSet.Status.Conditions, newStatus.Conditions) &&
+		podSet.Generation == newStatus.ObservedGeneration {
+		return podSet, nil
+	}
+	newStatus.ObservedGeneration = podSet.Generation
 
-	return nil, nil
+	podSet.Status = newStatus
+	if err := r.Status().Update(context.TODO(), podSet); err != nil {
+		return nil, err
+	}
+
+	return podSet, nil
 }
 
 func getPodsToDelete(filteredPods []*corev1.Pod, diff int) []*corev1.Pod {
