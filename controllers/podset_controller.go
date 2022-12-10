@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"sync"
 
 	"github.com/go-logr/logr"
@@ -246,23 +247,22 @@ func (r *PodSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *PodSetReconciler) updatePodSetStatus(podSet *pixiuv1alpha1.PodSet, newStatus pixiuv1alpha1.PodSetStatus) (*pixiuv1alpha1.PodSet, error) {
-	if podSet.Status.Replicas == newStatus.Replicas &&
-		podSet.Status.ReadyReplicas == newStatus.ReadyReplicas &&
-		podSet.Status.AvailableReplicas == newStatus.AvailableReplicas &&
-		// TODO: 判断条件
-		//reflect.DeepEqual(podSet.Status.Conditions, newStatus.Conditions) &&
-		podSet.Generation == newStatus.ObservedGeneration {
-		return podSet, nil
+func (r *PodSetReconciler) updatePodSetStatus(ps *pixiuv1alpha1.PodSet, newStatus pixiuv1alpha1.PodSetStatus) (*pixiuv1alpha1.PodSet, error) {
+	if ps.Status.Replicas == newStatus.Replicas &&
+		ps.Status.ReadyReplicas == newStatus.ReadyReplicas &&
+		ps.Status.AvailableReplicas == newStatus.AvailableReplicas &&
+		ps.Generation == newStatus.ObservedGeneration &&
+		reflect.DeepEqual(ps.Status.Conditions, newStatus.Conditions) {
+		return ps, nil
 	}
-	newStatus.ObservedGeneration = podSet.Generation
+	newStatus.ObservedGeneration = ps.Generation
 
-	podSet.Status = newStatus
-	if err := r.Status().Update(context.TODO(), podSet); err != nil {
+	ps.Status = newStatus
+	if err := r.Status().Update(context.TODO(), ps); err != nil {
 		return nil, err
 	}
 
-	return podSet, nil
+	return ps, nil
 }
 
 func getPodsToDelete(filteredPods []*corev1.Pod, diff int) []*corev1.Pod {
