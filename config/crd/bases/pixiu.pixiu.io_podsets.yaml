@@ -40,7 +40,7 @@ spec:
       name: IMAGES
       type: string
       priority: 1
-    - jsonPath: .spec.replicas
+    - jsonPath: .spec.selector.matchLabels
       name: SELECTOR
       type: string
       priority: 1
