@@ -21,4 +21,11 @@ const (
 	// due to insufficient quota, limit ranges, pod security policy, node selectors, etc. or deleted
 	// due to kubelet being down or finalizers are failing.
 	PodSetFailure string = "PodSetFailure"
+
+	PodSetSuccess string = "PodSetSuccess"
+
+	// MinimumReplicasAvailable is added in a podSet when it has its minimum replicas required available.
+	MinimumReplicasAvailable = "MinimumReplicasAvailable"
+
+	MinimumReplicasUnavailable = "MinimumReplicasUnavailable"
 )

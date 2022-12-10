@@ -259,6 +259,13 @@ func (r *PodSetReconciler) calculateStatus(podSet *pixiuv1alpha1.PodSet, filtere
 		RemoveCondition(&newStatus, pixiutypes.PodSetFailure)
 	}
 
+	// TODO: the default availableReplicas is 1
+	if availableReplicasCount >= 1 {
+		SetCondition(&newStatus, NewReplicaSetCondition(pixiutypes.PodSetSuccess, corev1.ConditionTrue, pixiutypes.MinimumReplicasAvailable, "PodSet has minimum availability."))
+	} else {
+		SetCondition(&newStatus, NewReplicaSetCondition(pixiutypes.PodSetSuccess, corev1.ConditionTrue, pixiutypes.MinimumReplicasUnavailable, "PodSet does not have minimum availability."))
+	}
+
 	newStatus.Replicas = int32(len(filteredPods))
 	newStatus.ReadyReplicas = int32(readyReplicasCount)
 	newStatus.AvailableReplicas = int32(availableReplicasCount)
