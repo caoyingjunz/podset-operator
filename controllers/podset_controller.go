@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"reflect"
 	"sync"
+	"time"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -103,11 +104,18 @@ func (r *PodSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	podSet = podSet.DeepCopy()
 	newStatus := r.calculateStatus(podSet, filteredPods, replicasErr)
 
-	_, err = r.updatePodSetStatus(podSet, newStatus)
+	updatePS, err := r.updatePodSetStatus(podSet, newStatus)
 	if err != nil {
-		return reconcile.Result{Requeue: true}, nil
+		// TODO: Resync the PodSet after MinReadySeconds
+		// MinReadySeconds will be supported
+		return reconcile.Result{RequeueAfter: time.Duration(0) * time.Second}, nil
 	}
 
+	if replicasErr == nil &&
+		updatePS.Status.ReadyReplicas == *(updatePS.Spec.Replicas) &&
+		updatePS.Status.AvailableReplicas != *(updatePS.Spec.Replicas) {
+		return reconcile.Result{RequeueAfter: time.Duration(0) * time.Second}, nil
+	}
 	return ctrl.Result{}, nil
 }
 
