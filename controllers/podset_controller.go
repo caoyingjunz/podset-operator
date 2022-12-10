@@ -28,6 +28,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -37,7 +38,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	pixiuv1alpha1 "github.com/caoyingjunz/podset-operator/api/v1alpha1"
-	"github.com/caoyingjunz/podset-operator/pkg/types"
+	pixiutypes "github.com/caoyingjunz/podset-operator/pkg/types"
+)
+
+const (
+	// The number of times we retry updating a PosSet's status.
+	statusUpdateRetries = 1
 )
 
 // PodSetReconciler reconciles a PodSet object
@@ -109,8 +115,8 @@ func (r *PodSetReconciler) manageReplicas(ctx context.Context, filteredPods []*c
 	diff := len(filteredPods) - int(*podSet.Spec.Replicas)
 	if diff < 0 {
 		diff *= -1
-		if diff > types.BurstReplicas {
-			diff = types.BurstReplicas
+		if diff > pixiutypes.BurstReplicas {
+			diff = pixiutypes.BurstReplicas
 		}
 		r.Log.Info("Too few replicas", "podSet", klog.KObj(podSet), "need", *(podSet.Spec.Replicas), "creating", diff)
 		_, err := r.createPodsInBatch(diff, 1, func() error {
@@ -123,8 +129,8 @@ func (r *PodSetReconciler) manageReplicas(ctx context.Context, filteredPods []*c
 		return err
 
 	} else if diff > 0 {
-		if diff > types.BurstReplicas {
-			diff = types.BurstReplicas
+		if diff > pixiutypes.BurstReplicas {
+			diff = pixiutypes.BurstReplicas
 		}
 		r.Log.Info("Too many replicas", "podSet", klog.KObj(podSet), "need", *(podSet.Spec.Replicas), "deleting", diff)
 		podToDelete := getPodsToDelete(filteredPods, diff)
@@ -247,6 +253,7 @@ func (r *PodSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
+// updateReplicaSetStatus attempts to update the Status.Replicas of the given ReplicaSet, with a single GET/PUT retry.
 func (r *PodSetReconciler) updatePodSetStatus(ps *pixiuv1alpha1.PodSet, newStatus pixiuv1alpha1.PodSetStatus) (*pixiuv1alpha1.PodSet, error) {
 	if ps.Status.Replicas == newStatus.Replicas &&
 		ps.Status.ReadyReplicas == newStatus.ReadyReplicas &&
@@ -255,11 +262,33 @@ func (r *PodSetReconciler) updatePodSetStatus(ps *pixiuv1alpha1.PodSet, newStatu
 		reflect.DeepEqual(ps.Status.Conditions, newStatus.Conditions) {
 		return ps, nil
 	}
+
+	// Save the generation number we acted on, otherwise we might wrongfully indicate
+	// that we've seen a spec update when we retry.
+	// TODO: This can clobber an update if we allow multiple agents to write to the
+	// same status.
 	newStatus.ObservedGeneration = ps.Generation
 
-	ps.Status = newStatus
-	if err := r.Status().Update(context.TODO(), ps); err != nil {
-		return nil, err
+	for i, ps := 0, ps; ; i++ {
+		klog.Infof(fmt.Sprintf("Updating status for %v: %s/%s, ", ps.Kind, ps.Namespace, ps.Name) +
+			fmt.Sprintf("replicas %d->%d (need %d), ", ps.Status.Replicas, newStatus.Replicas, *(ps.Spec.Replicas)) +
+			fmt.Sprintf("readyReplicas %d->%d, ", ps.Status.ReadyReplicas, newStatus.ReadyReplicas) +
+			fmt.Sprintf("availableReplicas %d->%d, ", ps.Status.AvailableReplicas, newStatus.AvailableReplicas))
+
+		ps.Status = newStatus
+		if err := r.Status().Update(context.TODO(), ps); err != nil {
+			return nil, err
+		}
+
+		// Stop retrying if we exceed statusUpdateRetries - the podSet will be requeued.
+		if i >= statusUpdateRetries {
+			break
+		}
+
+		// Get the PodSet with the latest resource version for the next poll
+		if err := r.Get(context.TODO(), types.NamespacedName{Namespace: ps.Namespace, Name: ps.Name}, ps); err != nil {
+			return nil, err
+		}
 	}
 
 	return ps, nil
