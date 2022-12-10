@@ -59,7 +59,7 @@ var _ reconcile.Reconciler = &PodSetReconciler{}
 // move the current state of the cluster closer to the desired state.
 func (r *PodSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("request", req)
-	log.V(1).Info("reconciling pod set operator")
+	log.Info("reconciling pod set operator")
 
 	podSet := &pixiuv1alpha1.PodSet{}
 	if err := r.Get(ctx, req.NamespacedName, podSet); err != nil {
