@@ -230,19 +230,33 @@ func (r *PodSetReconciler) createPodsInBatch(count int, initialBatchSize int, fn
 	return 0, nil
 }
 
-func (r *PodSetReconciler) calculateStatus(podSet *pixiuv1alpha1.PodSet, filteredPods []*corev1.Pod, replicasErr error) pixiuv1alpha1.PodSetStatus {
+func (r *PodSetReconciler) calculateStatus(podSet *pixiuv1alpha1.PodSet, filteredPods []*corev1.Pod, podSetErr error) pixiuv1alpha1.PodSetStatus {
 	newStatus := podSet.Status
 
 	readyReplicasCount := 0
 	availableReplicasCount := 0
-	// TODO: 设置 condition
 	for _, pod := range filteredPods {
+		// TODO: 通过 label match pods
 		if IsPodReady(pod) {
 			readyReplicasCount++
 			if IsPodAvailable(pod, 0, metav1.Now()) {
 				availableReplicasCount++
 			}
 		}
+	}
+
+	failureCond := GetCondition(podSet.Status, pixiutypes.PodSetFailure)
+	if podSetErr != nil && failureCond == nil {
+		var reason string
+		if diff := len(filteredPods) - int(*podSet.Spec.Replicas); diff < 0 {
+			reason = "FailedCreate"
+		} else if diff > 0 {
+			reason = "FailedDelete"
+		}
+		cond := NewReplicaSetCondition(pixiutypes.PodSetFailure, corev1.ConditionTrue, reason, podSetErr.Error())
+		SetCondition(&newStatus, cond)
+	} else if podSetErr == nil && failureCond != nil {
+		RemoveCondition(&newStatus, pixiutypes.PodSetFailure)
 	}
 
 	newStatus.Replicas = int32(len(filteredPods))

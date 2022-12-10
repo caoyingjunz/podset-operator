@@ -15,3 +15,10 @@ limitations under the License.
 */
 
 package types
+
+const (
+	// PodSetFailure is added in a pod set when one of its pods fails to be created
+	// due to insufficient quota, limit ranges, pod security policy, node selectors, etc. or deleted
+	// due to kubelet being down or finalizers are failing.
+	PodSetFailure string = "PodSetFailure"
+)
