@@ -15,21 +15,35 @@ spec:
     singular: podset
     shortNames:
     - ps
+    categories:
+    - all
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
     - jsonPath: .spec.replicas
-      name: READY
+      name: REPLICAS
       type: integer
-    - jsonPath: .spec.replicas
+    - jsonPath: .status.readyReplicas
       name: UP-TO-DATE
       type: integer
-    - jsonPath: .spec.replicas
+    - jsonPath: .status.availableReplicas
       name: AVAILABLE
       type: integer
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
+    - jsonPath: .spec.template.spec.containers[*].name
+      name: CONTAINERS
+      type: string
+      priority: 1
+    - jsonPath: .spec.template.spec.containers[*].image
+      name: IMAGES
+      type: string
+      priority: 1
+    - jsonPath: .spec.replicas
+      name: SELECTOR
+      type: string
+      priority: 1
     name: v1alpha1
     schema:
       openAPIV3Schema:
