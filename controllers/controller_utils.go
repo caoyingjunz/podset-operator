@@ -26,6 +26,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+
+	pixiuv1alpha1 "github.com/caoyingjunz/podset-operator/api/v1alpha1"
 )
 
 func GetPodFromTemplate(template *corev1.PodTemplateSpec, parentObject runtime.Object, controllerRef *metav1.OwnerReference) (*corev1.Pod, error) {
@@ -152,4 +154,50 @@ func GetPodConditionFromList(conditions []corev1.PodCondition, conditionType cor
 		}
 	}
 	return -1, nil
+}
+
+// GetCondition returns a replicaset condition with the provided type if it exists.
+func GetCondition(status pixiuv1alpha1.PodSetStatus, condType string) *pixiuv1alpha1.PodSetCondition {
+	for _, c := range status.Conditions {
+		if c.Type == condType {
+			return &c
+		}
+	}
+
+	return nil
+}
+
+func SetCondition(status *pixiuv1alpha1.PodSetStatus, condition pixiuv1alpha1.PodSetCondition) {
+	currentCond := GetCondition(*status, condition.Type)
+	if currentCond != nil && currentCond.Status == condition.Status && currentCond.Reason == condition.Reason {
+		return
+	}
+	newConditions := filterOutCondition(status.Conditions, condition.Type)
+	status.Conditions = append(newConditions, condition)
+}
+
+func RemoveCondition(status *pixiuv1alpha1.PodSetStatus, condType string) {
+	status.Conditions = filterOutCondition(status.Conditions, condType)
+}
+
+// filterOutCondition returns a new slice of podSet conditions without conditions with the provided type.
+func filterOutCondition(conditions []pixiuv1alpha1.PodSetCondition, condType string) []pixiuv1alpha1.PodSetCondition {
+	var newConditions []pixiuv1alpha1.PodSetCondition
+	for _, c := range conditions {
+		if c.Type == condType {
+			continue
+		}
+		newConditions = append(newConditions, c)
+	}
+	return newConditions
+}
+
+func NewReplicaSetCondition(condType string, status corev1.ConditionStatus, reason, msg string) pixiuv1alpha1.PodSetCondition {
+	return pixiuv1alpha1.PodSetCondition{
+		Type:               condType,
+		Status:             status,
+		LastTransitionTime: metav1.Now(),
+		Reason:             reason,
+		Message:            msg,
+	}
 }
