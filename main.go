@@ -86,6 +86,11 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "PodSet")
 		os.Exit(1)
 	}
+	// https://kubebuilder.io/cronjob-tutorial/webhook-implementation.html
+	if err = (&pixiuv1alpha1.PodSet{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "PodSet")
+		os.Exit(1)
+	}
 	//+kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
