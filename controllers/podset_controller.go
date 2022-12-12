@@ -20,7 +20,9 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
+	"github.com/caoyingjunz/podset-operator/controllers/metrics"
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -126,7 +128,7 @@ func (r *PodSetReconciler) manageReplicas(ctx context.Context, filteredPods []*c
 			diff = types.BurstReplicas
 		}
 		r.Log.Info("Too many replicas", "podSet", klog.KObj(podSet), "need", *(podSet.Spec.Replicas), "deleting", diff)
-		podToDelete := getPodsToDelete(filteredPods, diff)
+		podToDelete := r.getPodsToDelete(filteredPods, diff)
 
 		errCh := make(chan error, diff)
 		var wg sync.WaitGroup
@@ -265,6 +267,22 @@ func (r *PodSetReconciler) updatePodSetStatus(podSet *pixiuv1alpha1.PodSet, newS
 	return podSet, nil
 }
 
-func getPodsToDelete(filteredPods []*corev1.Pod, diff int) []*corev1.Pod {
+func (r *PodSetReconciler) getPodsToDelete(filteredPods []*corev1.Pod, diff int) []*corev1.Pod {
+	now := time.Now()
+	youngestTime := time.Time{}
+	if diff < len(filteredPods) {
+		for _, pod := range filteredPods {
+			if pod.CreationTimestamp.Time.After(youngestTime) && IsPodReady(pod) {
+				youngestTime = pod.CreationTimestamp.Time
+			}
+		}
+		for _, pod := range filteredPods[:diff] {
+			if !IsPodReady(pod) {
+				continue
+			}
+			ratio := float64(now.Sub(pod.CreationTimestamp.Time).Milliseconds() / now.Sub(youngestTime).Milliseconds())
+			metrics.SortingDeletionAgeRatio.Observe(ratio)
+		}
+	}
 	return filteredPods[:diff]
 }
