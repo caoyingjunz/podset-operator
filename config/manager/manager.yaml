@@ -31,7 +31,7 @@ spec:
         - /manager
         args:
         - --leader-elect
-        image: jacky06/podset:latest
+        image: jacky06/podset-controller:latest
         name: manager
         securityContext:
           allowPrivilegeEscalation: false
