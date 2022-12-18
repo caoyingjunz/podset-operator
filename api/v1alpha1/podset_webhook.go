@@ -17,7 +17,11 @@ limitations under the License.
 package v1alpha1
 
 import (
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	validationutils "k8s.io/apimachinery/pkg/util/validation"
+	"k8s.io/apimachinery/pkg/util/validation/field"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -54,22 +58,52 @@ var _ webhook.Validator = &PodSet{}
 func (r *PodSet) ValidateCreate() error {
 	podsetlog.Info("validate create", "name", r.Name)
 
-	// TODO(user): fill in your validation logic upon object creation.
-	return nil
+	return r.validatePodSet()
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
 func (r *PodSet) ValidateUpdate(old runtime.Object) error {
 	podsetlog.Info("validate update", "name", r.Name)
 
-	// TODO(user): fill in your validation logic upon object update.
-	return nil
+	return r.validatePodSet()
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
 func (r *PodSet) ValidateDelete() error {
 	podsetlog.Info("validate delete", "name", r.Name)
 
-	// TODO(user): fill in your validation logic upon object deletion.
+	return nil
+}
+
+func (r *PodSet) validatePodSet() error {
+	var allErrs field.ErrorList
+	if err := r.validatePodSetName(); err != nil {
+		allErrs = append(allErrs, err)
+	}
+	if err := r.validatePodSetSpec(); err != nil {
+		allErrs = append(allErrs, err)
+	}
+	if len(allErrs) == 0 {
+		return nil
+	}
+
+	return apierrors.NewInvalid(
+		schema.GroupKind{Group: "pixiu.pixiu.io", Kind: "PodSet"},
+		r.Name, allErrs)
+}
+
+func (r *PodSet) validatePodSetSpec() *field.Error {
+	// TODO
+	return nil
+}
+
+func (r *PodSet) validatePodSetName() *field.Error {
+	if len(r.ObjectMeta.Name) == 0 {
+		return field.Invalid(field.NewPath("metadata").Child("name"), r.Name, "must be than 0 characters")
+	}
+	if len(r.ObjectMeta.Name) > validationutils.DNS1035LabelMaxLength-11 {
+		return field.Invalid(field.NewPath("metadata").Child("name"), r.Name, "must be no more than 52 characters")
+	}
+
 	return nil
 }
