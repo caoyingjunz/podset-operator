@@ -5,9 +5,10 @@ metadata:
   name: podset-viewer-role
 rules:
 - apiGroups:
-  - pixiu.pixiu.io
+  - "*"
   resources:
   - podsets
+  - pods
   verbs:
   - get
   - list
