@@ -73,16 +73,6 @@ func main() {
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "leaderlock.pixiu.io",
 	}
-	if os.Getenv("DEBUG") == "True" {
-		// Run on localhost
-		wd, err := os.Getwd()
-		if err != nil {
-			setupLog.Error(err, "unable to get work dir")
-			os.Exit(1)
-		}
-		options.CertDir = wd + "/config/certs"
-	}
-
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), options)
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
