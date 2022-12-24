@@ -4,6 +4,8 @@ kind: MutatingWebhookConfiguration
 metadata:
   creationTimestamp: null
   name: mutating-webhook-configuration
+  annotations:
+    cert-manager.io/inject-ca-from: system/serving-cert
 webhooks:
 - admissionReviewVersions:
   - v1
@@ -31,6 +33,8 @@ kind: ValidatingWebhookConfiguration
 metadata:
   creationTimestamp: null
   name: validating-webhook-configuration
+  annotations:
+    cert-manager.io/inject-ca-from: system/serving-cert
 webhooks:
 - admissionReviewVersions:
   - v1
