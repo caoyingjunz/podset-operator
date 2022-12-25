@@ -51,12 +51,16 @@ func init() {
 func main() {
 	var metricsAddr string
 	var enableLeaderElection bool
+	var leaderElectionNamespace string
 	var probeAddr string
+	var disableWebhook bool
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", true,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
+	flag.StringVar(&leaderElectionNamespace, "leader-election-namespace", "", "The namespace for leader election.")
+	flag.BoolVar(&disableWebhook, "disable-webhook", false, "Disable webhook for controller manager.")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -73,6 +77,10 @@ func main() {
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "leaderlock.pixiu.io",
 	}
+	if len(leaderElectionNamespace) != 0 {
+		options.LeaderElectionNamespace = leaderElectionNamespace
+	}
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), options)
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
@@ -88,10 +96,13 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "PodSet")
 		os.Exit(1)
 	}
-	// refer to https://kubebuilder.io/cronjob-tutorial/webhook-implementation.html
-	if err = (&pixiuv1alpha1.PodSet{}).SetupWebhookWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create webhook", "webhook", "PodSet")
-		os.Exit(1)
+
+	if !disableWebhook {
+		// refer to https://kubebuilder.io/cronjob-tutorial/webhook-implementation.html
+		if err = (&pixiuv1alpha1.PodSet{}).SetupWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "PodSet")
+			os.Exit(1)
+		}
 	}
 	//+kubebuilder:scaffold:builder
 
