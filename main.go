@@ -77,7 +77,7 @@ func main() {
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "leaderlock.pixiu.io",
 	}
-	if len(leaderElectionNamespace) != 0 {
+	if enableLeaderElection && len(leaderElectionNamespace) != 0 {
 		options.LeaderElectionNamespace = leaderElectionNamespace
 	}
 
