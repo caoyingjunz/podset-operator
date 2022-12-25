@@ -47,6 +47,11 @@ const (
 	statusUpdateRetries = 1
 )
 
+const (
+	FailedCreatePodReason     = "FailedCreate"
+	SuccessfulCreatePodReason = "SuccessfulCreate"
+)
+
 // PodSetReconciler reconciles a PodSet object
 type PodSetReconciler struct {
 	client.Client
@@ -189,11 +194,12 @@ func (r *PodSetReconciler) createPod(ctx context.Context, namespace string, temp
 	pod.SetNamespace(namespace)
 	if err = r.Create(ctx, pod); err != nil {
 		if apierrors.HasStatusCause(err, corev1.NamespaceTerminatingCause) {
-			// TODO: 打印个事件
+			r.Recorder.Eventf(object, corev1.EventTypeWarning, FailedCreatePodReason, "Error creating: %v", err)
 		}
 		return err
 	}
 
+	r.Recorder.Eventf(object, corev1.EventTypeNormal, SuccessfulCreatePodReason, "Created pod: %v", pod.Name)
 	return nil
 }
 
