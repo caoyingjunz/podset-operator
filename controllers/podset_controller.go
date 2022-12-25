@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"sync"
 	"time"
 
@@ -29,6 +30,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -38,7 +40,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	pixiuv1alpha1 "github.com/caoyingjunz/podset-operator/api/v1alpha1"
-	"github.com/caoyingjunz/podset-operator/pkg/types"
+	pixiutypes "github.com/caoyingjunz/podset-operator/pkg/types"
+)
+
+const (
+	// The number of times we retry updating a PosSet's status.
+	statusUpdateRetries = 1
 )
 
 // PodSetReconciler reconciles a PodSet object
@@ -61,7 +68,7 @@ var _ reconcile.Reconciler = &PodSetReconciler{}
 // move the current state of the cluster closer to the desired state.
 func (r *PodSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("request", req)
-	log.V(1).Info("reconciling pod set operator")
+	log.Info("reconciling pod set operator")
 
 	podSet := &pixiuv1alpha1.PodSet{}
 	if err := r.Get(ctx, req.NamespacedName, podSet); err != nil {
@@ -98,11 +105,18 @@ func (r *PodSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	podSet = podSet.DeepCopy()
 	newStatus := r.calculateStatus(podSet, filteredPods, replicasErr)
 
-	_, err = r.updatePodSetStatus(podSet, newStatus)
+	updatePS, err := r.updatePodSetStatus(podSet, newStatus)
 	if err != nil {
-		return reconcile.Result{Requeue: true}, nil
+		// TODO: Resync the PodSet after MinReadySeconds
+		// MinReadySeconds will be supported
+		return reconcile.Result{RequeueAfter: time.Duration(0) * time.Second}, nil
 	}
 
+	if replicasErr == nil &&
+		updatePS.Status.ReadyReplicas == *(updatePS.Spec.Replicas) &&
+		updatePS.Status.AvailableReplicas != *(updatePS.Spec.Replicas) {
+		return reconcile.Result{RequeueAfter: time.Duration(0) * time.Second}, nil
+	}
 	return ctrl.Result{}, nil
 }
 
@@ -110,8 +124,8 @@ func (r *PodSetReconciler) manageReplicas(ctx context.Context, filteredPods []*c
 	diff := len(filteredPods) - int(*podSet.Spec.Replicas)
 	if diff < 0 {
 		diff *= -1
-		if diff > types.BurstReplicas {
-			diff = types.BurstReplicas
+		if diff > pixiutypes.BurstReplicas {
+			diff = pixiutypes.BurstReplicas
 		}
 		r.Log.Info("Too few replicas", "podSet", klog.KObj(podSet), "need", *(podSet.Spec.Replicas), "creating", diff)
 		_, err := r.createPodsInBatch(diff, 1, func() error {
@@ -124,8 +138,8 @@ func (r *PodSetReconciler) manageReplicas(ctx context.Context, filteredPods []*c
 		return err
 
 	} else if diff > 0 {
-		if diff > types.BurstReplicas {
-			diff = types.BurstReplicas
+		if diff > pixiutypes.BurstReplicas {
+			diff = pixiutypes.BurstReplicas
 		}
 		r.Log.Info("Too many replicas", "podSet", klog.KObj(podSet), "need", *(podSet.Spec.Replicas), "deleting", diff)
 		podToDelete := r.getPodsToDelete(filteredPods, diff)
@@ -217,19 +231,40 @@ func (r *PodSetReconciler) createPodsInBatch(count int, initialBatchSize int, fn
 	return 0, nil
 }
 
-func (r *PodSetReconciler) calculateStatus(podSet *pixiuv1alpha1.PodSet, filteredPods []*corev1.Pod, replicasErr error) pixiuv1alpha1.PodSetStatus {
+func (r *PodSetReconciler) calculateStatus(podSet *pixiuv1alpha1.PodSet, filteredPods []*corev1.Pod, podSetErr error) pixiuv1alpha1.PodSetStatus {
 	newStatus := podSet.Status
 
 	readyReplicasCount := 0
 	availableReplicasCount := 0
-	// TODO: 设置 condition
 	for _, pod := range filteredPods {
+		// TODO: 通过 label match pods
 		if IsPodReady(pod) {
 			readyReplicasCount++
 			if IsPodAvailable(pod, 0, metav1.Now()) {
 				availableReplicasCount++
 			}
 		}
+	}
+
+	failureCond := GetCondition(podSet.Status, pixiutypes.PodSetFailure)
+	if podSetErr != nil && failureCond == nil {
+		var reason string
+		if diff := len(filteredPods) - int(*podSet.Spec.Replicas); diff < 0 {
+			reason = "FailedCreate"
+		} else if diff > 0 {
+			reason = "FailedDelete"
+		}
+		cond := NewReplicaSetCondition(pixiutypes.PodSetFailure, corev1.ConditionTrue, reason, podSetErr.Error())
+		SetCondition(&newStatus, cond)
+	} else if podSetErr == nil && failureCond != nil {
+		RemoveCondition(&newStatus, pixiutypes.PodSetFailure)
+	}
+
+	// TODO: the default availableReplicas is 1
+	if availableReplicasCount >= 1 {
+		SetCondition(&newStatus, NewReplicaSetCondition(pixiutypes.PodSetSuccess, corev1.ConditionTrue, pixiutypes.MinimumReplicasAvailable, "PodSet has minimum availability."))
+	} else {
+		SetCondition(&newStatus, NewReplicaSetCondition(pixiutypes.PodSetSuccess, corev1.ConditionTrue, pixiutypes.MinimumReplicasUnavailable, "PodSet does not have minimum availability."))
 	}
 
 	newStatus.Replicas = int32(len(filteredPods))
@@ -248,23 +283,45 @@ func (r *PodSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *PodSetReconciler) updatePodSetStatus(podSet *pixiuv1alpha1.PodSet, newStatus pixiuv1alpha1.PodSetStatus) (*pixiuv1alpha1.PodSet, error) {
-	if podSet.Status.Replicas == newStatus.Replicas &&
-		podSet.Status.ReadyReplicas == newStatus.ReadyReplicas &&
-		podSet.Status.AvailableReplicas == newStatus.AvailableReplicas &&
-		// TODO: 判断条件
-		//reflect.DeepEqual(podSet.Status.Conditions, newStatus.Conditions) &&
-		podSet.Generation == newStatus.ObservedGeneration {
-		return podSet, nil
-	}
-	newStatus.ObservedGeneration = podSet.Generation
-
-	podSet.Status = newStatus
-	if err := r.Status().Update(context.TODO(), podSet); err != nil {
-		return nil, err
+// updateReplicaSetStatus attempts to update the Status.Replicas of the given ReplicaSet, with a single GET/PUT retry.
+func (r *PodSetReconciler) updatePodSetStatus(ps *pixiuv1alpha1.PodSet, newStatus pixiuv1alpha1.PodSetStatus) (*pixiuv1alpha1.PodSet, error) {
+	if ps.Status.Replicas == newStatus.Replicas &&
+		ps.Status.ReadyReplicas == newStatus.ReadyReplicas &&
+		ps.Status.AvailableReplicas == newStatus.AvailableReplicas &&
+		ps.Generation == newStatus.ObservedGeneration &&
+		reflect.DeepEqual(ps.Status.Conditions, newStatus.Conditions) {
+		return ps, nil
 	}
 
-	return podSet, nil
+	// Save the generation number we acted on, otherwise we might wrongfully indicate
+	// that we've seen a spec update when we retry.
+	// TODO: This can clobber an update if we allow multiple agents to write to the
+	// same status.
+	newStatus.ObservedGeneration = ps.Generation
+
+	for i, ps := 0, ps; ; i++ {
+		klog.Infof(fmt.Sprintf("Updating status for %v: %s/%s, ", ps.Kind, ps.Namespace, ps.Name) +
+			fmt.Sprintf("replicas %d->%d (need %d), ", ps.Status.Replicas, newStatus.Replicas, *(ps.Spec.Replicas)) +
+			fmt.Sprintf("readyReplicas %d->%d, ", ps.Status.ReadyReplicas, newStatus.ReadyReplicas) +
+			fmt.Sprintf("availableReplicas %d->%d, ", ps.Status.AvailableReplicas, newStatus.AvailableReplicas))
+
+		ps.Status = newStatus
+		if err := r.Status().Update(context.TODO(), ps); err != nil {
+			return nil, err
+		}
+
+		// Stop retrying if we exceed statusUpdateRetries - the podSet will be requeued.
+		if i >= statusUpdateRetries {
+			break
+		}
+
+		// Get the PodSet with the latest resource version for the next poll
+		if err := r.Get(context.TODO(), types.NamespacedName{Namespace: ps.Namespace, Name: ps.Name}, ps); err != nil {
+			return nil, err
+		}
+	}
+
+	return ps, nil
 }
 
 func (r *PodSetReconciler) getPodsToDelete(filteredPods []*corev1.Pod, diff int) []*corev1.Pod {

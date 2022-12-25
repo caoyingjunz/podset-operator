@@ -6,9 +6,10 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
-  - pixiu.pixiu.io
+  - "*"
   resources:
   - podsets
+  - pods
   verbs:
   - create
   - delete
