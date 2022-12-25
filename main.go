@@ -24,6 +24,7 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -34,6 +35,8 @@ import (
 	pixiuv1alpha1 "github.com/caoyingjunz/podset-operator/api/v1alpha1"
 	"github.com/caoyingjunz/podset-operator/controllers"
 	//+kubebuilder:scaffold:imports
+
+	"github.com/caoyingjunz/podset-operator/pkg/metrics"
 )
 
 var (
@@ -46,6 +49,8 @@ func init() {
 
 	utilruntime.Must(pixiuv1alpha1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
+
+	metrics.RegisterPodSet()
 }
 
 func main() {
@@ -105,7 +110,10 @@ func main() {
 		}
 	}
 	//+kubebuilder:scaffold:builder
-
+	if err := mgr.AddMetricsExtraHandler("metrics", promhttp.Handler()); err != nil {
+		setupLog.Error(err, "unable to set up metrics")
+		os.Exit(1)
+	}
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up health check")
 		os.Exit(1)

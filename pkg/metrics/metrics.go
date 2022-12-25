@@ -19,3 +19,29 @@ package metrics
 import (
 	"github.com/prometheus/client_golang/prometheus"
 )
+
+type MetricsProvider interface {
+	HandleMetrics() error
+}
+
+type metricsPodSet struct{}
+
+// HandleMetrics
+// TODO: do test
+func (m *metricsPodSet) HandleMetrics() error {
+	psCount.Set(100)
+	return nil
+}
+
+var (
+	psCount = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "pod_set_count",
+			Help: "Number of podSets successfully created",
+		},
+	)
+)
+
+func RegisterPodSet() {
+	prometheus.MustRegister(psCount)
+}
