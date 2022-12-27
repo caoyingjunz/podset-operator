@@ -92,10 +92,11 @@ func main() {
 	}
 
 	if err = (&controllers.PodSetReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
-		Log:      ctrl.Log.WithName("pixiu").WithName("controller"),
-		Recorder: mgr.GetEventRecorderFor("pixiu"),
+		Client:          mgr.GetClient(),
+		Scheme:          mgr.GetScheme(),
+		Log:             ctrl.Log.WithName("pixiu").WithName("controller"),
+		Recorder:        mgr.GetEventRecorderFor("pixiu"),
+		MetricsProvider: metrics.NewMetricsPodSet(mgr.GetClient()),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PodSet")
 		os.Exit(1)

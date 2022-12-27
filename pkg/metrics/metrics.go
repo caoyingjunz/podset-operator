@@ -17,19 +17,45 @@ limitations under the License.
 package metrics
 
 import (
+	"context"
+
 	"github.com/prometheus/client_golang/prometheus"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
+
+	pixiuv1alpha1 "github.com/caoyingjunz/podset-operator/api/v1alpha1"
 )
 
+type MetricsProvider interface {
+	HandleMetrics() error
+}
+
 var (
-	psCount = prometheus.NewCounter(
-		prometheus.CounterOpts{
-			Name: "pod_set_count",
-			Help: "Number of podSets successfully created",
+	podSetCount = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "pixiu_podset_count",
+			Help: "Number of podSets",
 		},
 	)
 )
 
+type metricsPodSet struct {
+	client client.Client
+}
+
+func (p *metricsPodSet) HandleMetrics() error {
+	podSets := &pixiuv1alpha1.PodSetList{}
+	if err := p.client.List(context.TODO(), podSets); err != nil {
+		return err
+	}
+	podSetCount.Set(float64(len(podSets.Items)))
+	return nil
+}
+
+func NewMetricsPodSet(c client.Client) MetricsProvider {
+	return &metricsPodSet{c}
+}
+
 func RegisterPodSet() {
-	metrics.Registry.MustRegister(psCount)
+	metrics.Registry.MustRegister(podSetCount)
 }
