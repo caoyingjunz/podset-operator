@@ -34,6 +34,8 @@ import (
 	pixiuv1alpha1 "github.com/caoyingjunz/podset-operator/api/v1alpha1"
 	"github.com/caoyingjunz/podset-operator/controllers"
 	//+kubebuilder:scaffold:imports
+
+	"github.com/caoyingjunz/podset-operator/pkg/metrics"
 )
 
 var (
@@ -46,17 +48,23 @@ func init() {
 
 	utilruntime.Must(pixiuv1alpha1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
+
+	metrics.RegisterPodSet()
 }
 
 func main() {
 	var metricsAddr string
 	var enableLeaderElection bool
+	var leaderElectionNamespace string
 	var probeAddr string
+	var disableWebhook bool
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", true,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
+	flag.StringVar(&leaderElectionNamespace, "leader-election-namespace", "", "The namespace for leader election.")
+	flag.BoolVar(&disableWebhook, "disable-webhook", false, "Disable webhook for controller manager.")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -73,6 +81,10 @@ func main() {
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "leaderlock.pixiu.io",
 	}
+	if enableLeaderElection && len(leaderElectionNamespace) != 0 {
+		options.LeaderElectionNamespace = leaderElectionNamespace
+	}
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), options)
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
@@ -80,18 +92,22 @@ func main() {
 	}
 
 	if err = (&controllers.PodSetReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
-		Log:      ctrl.Log.WithName("pixiu").WithName("controller"),
-		Recorder: mgr.GetEventRecorderFor("pixiu"),
+		Client:          mgr.GetClient(),
+		Scheme:          mgr.GetScheme(),
+		Log:             ctrl.Log.WithName("pixiu").WithName("controller"),
+		Recorder:        mgr.GetEventRecorderFor("pixiu"),
+		MetricsProvider: metrics.NewMetricsPodSet(mgr.GetClient()),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PodSet")
 		os.Exit(1)
 	}
-	// refer to https://kubebuilder.io/cronjob-tutorial/webhook-implementation.html
-	if err = (&pixiuv1alpha1.PodSet{}).SetupWebhookWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create webhook", "webhook", "PodSet")
-		os.Exit(1)
+
+	if !disableWebhook {
+		// refer to https://kubebuilder.io/cronjob-tutorial/webhook-implementation.html
+		if err = (&pixiuv1alpha1.PodSet{}).SetupWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "PodSet")
+			os.Exit(1)
+		}
 	}
 	//+kubebuilder:scaffold:builder
 

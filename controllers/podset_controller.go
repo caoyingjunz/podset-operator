@@ -39,6 +39,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	pixiuv1alpha1 "github.com/caoyingjunz/podset-operator/api/v1alpha1"
+	"github.com/caoyingjunz/podset-operator/pkg/metrics"
 	pixiutypes "github.com/caoyingjunz/podset-operator/pkg/types"
 )
 
@@ -58,7 +59,8 @@ type PodSetReconciler struct {
 	Scheme *runtime.Scheme
 	Log    logr.Logger
 
-	Recorder record.EventRecorder // TODO
+	Recorder        record.EventRecorder
+	MetricsProvider metrics.MetricsProvider
 }
 
 //+kubebuilder:rbac:groups=pixiu.pixiu.io,resources=podsets,verbs=get;list;watch;create;update;patch;delete
@@ -73,6 +75,9 @@ var _ reconcile.Reconciler = &PodSetReconciler{}
 func (r *PodSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("request", req)
 	log.Info("reconciling pod set operator")
+
+	// HandleMetrics
+	defer r.MetricsProvider.HandleMetrics()
 
 	podSet := &pixiuv1alpha1.PodSet{}
 	if err := r.Get(ctx, req.NamespacedName, podSet); err != nil {
